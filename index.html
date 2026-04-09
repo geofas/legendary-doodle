@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#1a1a2e">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>Uno Tracker</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- ========== WELCOME SCREEN ========== -->
+  <div id="screen-welcome" class="screen active">
+    <div class="welcome-content">
+      <div class="logo">
+        <div class="logo-card logo-red">U</div>
+        <div class="logo-card logo-blue">N</div>
+        <div class="logo-card logo-green">O</div>
+      </div>
+      <h1>Uno Tracker</h1>
+      <p class="subtitle">Camera-assisted turn &amp; direction tracker</p>
+      <button id="btn-start" class="btn btn-primary btn-large">Start Game</button>
+    </div>
+  </div>
+
+  <!-- ========== SETUP SCREEN ========== -->
+  <div id="screen-setup" class="screen">
+    <div class="setup-content">
+      <h2>Player Setup</h2>
+      <p class="hint">Add players in clockwise seating order</p>
+
+      <div id="player-list" class="player-list"></div>
+
+      <div class="add-player-row">
+        <input type="text" id="input-player-name" placeholder="Player name" maxlength="20" autocomplete="off">
+        <button id="btn-add-player" class="btn btn-secondary">Add</button>
+      </div>
+
+      <div class="quick-add">
+        <span class="hint">Quick add:</span>
+        <button class="btn btn-chip quick-player" data-name="Player 1">P1</button>
+        <button class="btn btn-chip quick-player" data-name="Player 2">P2</button>
+        <button class="btn btn-chip quick-player" data-name="Player 3">P3</button>
+        <button class="btn btn-chip quick-player" data-name="Player 4">P4</button>
+      </div>
+
+      <div id="setup-error" class="error-msg hidden"></div>
+
+      <button id="btn-begin-game" class="btn btn-primary btn-large" disabled>
+        Begin Game (need 2+ players)
+      </button>
+    </div>
+  </div>
+
+  <!-- ========== GAME SCREEN ========== -->
+  <div id="screen-game" class="screen">
+    <!-- Top bar: direction + current player -->
+    <div class="game-top-bar">
+      <div class="direction-display">
+        <span id="direction-arrow" class="direction-arrow">&#x21BB;</span>
+        <span id="direction-label" class="direction-label">Clockwise</span>
+      </div>
+      <div class="turn-display">
+        <div class="turn-label">Now playing:</div>
+        <div id="current-player-name" class="current-player-name">---</div>
+      </div>
+    </div>
+
+    <!-- Camera feed -->
+    <div class="camera-container">
+      <video id="camera-feed" autoplay playsinline muted></video>
+      <canvas id="camera-canvas" class="hidden-canvas"></canvas>
+      <div id="color-indicator" class="color-indicator">
+        <span id="detected-color-label">Scanning...</span>
+      </div>
+    </div>
+
+    <!-- Card selection -->
+    <div class="card-selection">
+      <div class="selection-section">
+        <div class="section-label">Color</div>
+        <div class="color-buttons">
+          <button class="btn-color btn-uno-red" data-color="red">Red</button>
+          <button class="btn-color btn-uno-blue" data-color="blue">Blue</button>
+          <button class="btn-color btn-uno-green" data-color="green">Green</button>
+          <button class="btn-color btn-uno-yellow" data-color="yellow">Yellow</button>
+          <button class="btn-color btn-uno-wild" data-color="wild">Wild</button>
+        </div>
+      </div>
+
+      <div class="selection-section">
+        <div class="section-label">Value</div>
+        <div class="value-buttons">
+          <button class="btn-value" data-value="0">0</button>
+          <button class="btn-value" data-value="1">1</button>
+          <button class="btn-value" data-value="2">2</button>
+          <button class="btn-value" data-value="3">3</button>
+          <button class="btn-value" data-value="4">4</button>
+          <button class="btn-value" data-value="5">5</button>
+          <button class="btn-value" data-value="6">6</button>
+          <button class="btn-value" data-value="7">7</button>
+          <button class="btn-value" data-value="8">8</button>
+          <button class="btn-value" data-value="9">9</button>
+          <button class="btn-value btn-value-action" data-value="skip">Skip</button>
+          <button class="btn-value btn-value-action" data-value="reverse">Rev</button>
+          <button class="btn-value btn-value-action" data-value="draw2">+2</button>
+          <button class="btn-value btn-value-action" data-value="wild">Wild</button>
+          <button class="btn-value btn-value-action" data-value="wild4">+4</button>
+        </div>
+      </div>
+
+      <button id="btn-play-card" class="btn btn-primary btn-play" disabled>
+        Play Card
+      </button>
+    </div>
+
+    <!-- Player ring at bottom -->
+    <div id="player-ring" class="player-ring"></div>
+  </div>
+
+  <!-- ========== ANNOUNCEMENT OVERLAY ========== -->
+  <div id="overlay-announcement" class="overlay hidden">
+    <div class="announcement-content">
+      <div id="played-card-display" class="played-card-display"></div>
+      <div class="announcement-arrow">&#x2193;</div>
+      <div id="next-player-announce" class="next-player-announce">Next Player</div>
+      <div id="special-action" class="special-action"></div>
+      <button id="btn-dismiss-announcement" class="btn btn-primary btn-large">OK</button>
+    </div>
+  </div>
+
+  <!-- ========== MENU OVERLAY ========== -->
+  <div id="overlay-menu" class="overlay hidden">
+    <div class="menu-content">
+      <h2>Game Menu</h2>
+      <button id="btn-undo" class="btn btn-secondary btn-large">Undo Last Play</button>
+      <button id="btn-new-game" class="btn btn-secondary btn-large">New Game</button>
+      <button id="btn-close-menu" class="btn btn-primary btn-large">Resume</button>
+    </div>
+  </div>
+
+  <button id="btn-menu" class="btn-menu hidden" title="Menu">&#x2630;</button>
+
+  <script src="game.js"></script>
+  <script src="camera.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

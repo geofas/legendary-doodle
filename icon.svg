@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="80" fill="#1a1a2e"/>
+  <rect x="80" y="100" width="100" height="140" rx="14" fill="#d72600" transform="rotate(-8 130 170)"/>
+  <text x="130" y="185" text-anchor="middle" font-family="Arial,sans-serif" font-size="72" font-weight="900" fill="white" transform="rotate(-8 130 170)">U</text>
+  <rect x="200" y="100" width="100" height="140" rx="14" fill="#0956bf"/>
+  <text x="250" y="185" text-anchor="middle" font-family="Arial,sans-serif" font-size="72" font-weight="900" fill="white">N</text>
+  <rect x="320" y="100" width="100" height="140" rx="14" fill="#2ca05a" transform="rotate(8 370 170)"/>
+  <text x="370" y="185" text-anchor="middle" font-family="Arial,sans-serif" font-size="72" font-weight="900" fill="white" transform="rotate(8 370 170)">O</text>
+  <text x="256" y="340" text-anchor="middle" font-family="Arial,sans-serif" font-size="48" font-weight="700" fill="#e94560">TRACKER</text>
+  <path d="M180 390 Q256 440 332 390" stroke="#ecd407" stroke-width="8" fill="none" stroke-linecap="round"/>
+  <polygon points="326,384 342,394 330,398" fill="#ecd407"/>
+</svg>
