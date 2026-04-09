@@ -2,7 +2,7 @@
  * Uno Tracker - Main App Controller
  *
  * Manages screen navigation, player setup, card selection UI,
- * camera integration, game flow, and text-to-speech announcements.
+ * game flow, and text-to-speech announcements.
  */
 
 (function () {
@@ -33,12 +33,10 @@
     directionArrow: $('#direction-arrow'),
     directionLabel: $('#direction-label'),
     currentPlayerName: $('#current-player-name'),
-    cameraFeed: $('#camera-feed'),
-    cameraCanvas: $('#camera-canvas'),
-    colorIndicator: $('#color-indicator'),
-    detectedColorLabel: $('#detected-color-label'),
+    currentCardDisplay: $('#current-card-display'),
     playerRing: $('#player-ring'),
     btnPlayCard: $('#btn-play-card'),
+    btnDrawCard: $('#btn-draw-card'),
     btnMenu: $('#btn-menu'),
 
     // Announcement overlay
@@ -58,7 +56,6 @@
   // ====== STATE ======
   let players = [];
   let game = null;
-  let camera = null;
   let selectedColor = null;
   let selectedValue = null;
 
@@ -110,7 +107,6 @@
       </div>
     `).join('');
 
-    // Update begin button
     if (players.length >= 2) {
       els.btnBeginGame.disabled = false;
       els.btnBeginGame.textContent = `Begin Game (${players.length} players)`;
@@ -119,7 +115,6 @@
       els.btnBeginGame.textContent = `Begin Game (need ${2 - players.length} more)`;
     }
 
-    // Update quick-add buttons visibility
     $$('.quick-player').forEach(btn => {
       const name = btn.dataset.name;
       btn.disabled = players.some(p => p.toLowerCase() === name.toLowerCase());
@@ -162,35 +157,11 @@
   });
 
   // ====== GAME START ======
-  async function startGame() {
+  function startGame() {
     game = new UnoGame(players);
-
-    // Initialize camera
-    camera = new UnoCamera(els.cameraFeed, els.cameraCanvas);
-    const cameraOk = await camera.start();
-
-    if (cameraOk) {
-      camera.onColorDetected = onCameraColorDetected;
-      camera.startDetection();
-    } else {
-      // Camera not available - that's OK, manual selection still works
-      els.colorIndicator.innerHTML = '<span>Camera unavailable - select color manually</span>';
-    }
-
     showScreen('game');
+    resetCardSelection();
     updateGameUI();
-  }
-
-  // ====== CAMERA COLOR DETECTION ======
-  function onCameraColorDetected(color) {
-    // Highlight the detected color in the UI
-    els.colorIndicator.className = 'color-indicator detected-' + color;
-    els.detectedColorLabel.textContent = `Detected: ${color.charAt(0).toUpperCase() + color.slice(1)}`;
-
-    // Auto-select the detected color (but don't override manual selection)
-    if (!selectedColor) {
-      selectColor(color);
-    }
   }
 
   // ====== CARD SELECTION ======
@@ -200,8 +171,6 @@
       btn.classList.toggle('selected', btn.dataset.color === color);
     });
     updatePlayButton();
-
-    // If wild color selected, filter value buttons to show only wild values
     updateValueButtonsForColor(color);
   }
 
@@ -219,7 +188,6 @@
   }
 
   function updateValueButtonsForColor(color) {
-    // Wild color: only wild and wild4 values make sense
     if (color === 'wild') {
       $$('.btn-value').forEach(btn => {
         const v = btn.dataset.value;
@@ -231,12 +199,10 @@
           btn.disabled = true;
         }
       });
-      // Auto-select wild if no value selected
       if (!selectedValue || (selectedValue !== 'wild' && selectedValue !== 'wild4')) {
         selectValue('wild');
       }
     } else {
-      // Normal color: all values except plain wild make sense
       $$('.btn-value').forEach(btn => {
         const v = btn.dataset.value;
         if (v === 'wild') {
@@ -247,7 +213,6 @@
           btn.disabled = false;
         }
       });
-      // If current selection is 'wild', deselect it
       if (selectedValue === 'wild') {
         selectedValue = null;
         $$('.btn-value').forEach(btn => btn.classList.remove('selected'));
@@ -264,7 +229,7 @@
       const valueLabel = UnoGame.valueDisplay(selectedValue);
       els.btnPlayCard.textContent = `Play ${colorLabel} ${valueLabel}`;
     } else {
-      els.btnPlayCard.textContent = 'Select card to play';
+      els.btnPlayCard.textContent = 'Play Card';
     }
   }
 
@@ -283,22 +248,29 @@
   // Play card button
   els.btnPlayCard.addEventListener('click', () => {
     if (!selectedColor || !selectedValue) return;
-    playCard(selectedColor, selectedValue);
+    const result = game.playCard(selectedColor, selectedValue);
+    showAnnouncement(result);
   });
 
-  // ====== PLAY CARD ======
-  function playCard(color, value) {
-    const result = game.playCard(color, value);
+  // Draw card button (can't play)
+  els.btnDrawCard.addEventListener('click', () => {
+    const result = game.drawCard();
     showAnnouncement(result);
-  }
+  });
 
+  // ====== ANNOUNCEMENT ======
   function showAnnouncement(result) {
-    const { card, nextPlayer, actionMessage, directionChanged, skippedPlayer } = result;
+    const { card, nextPlayer, actionMessage } = result;
 
     // Card display
-    const cardClass = card.color === 'wild' ? 'card-wild' : `card-${card.color}`;
-    els.playedCardDisplay.className = `played-card-display ${cardClass}`;
-    els.playedCardDisplay.textContent = UnoGame.valueDisplay(card.value);
+    if (card) {
+      const cardClass = card.color === 'wild' ? 'card-wild' : `card-${card.color}`;
+      els.playedCardDisplay.className = `played-card-display ${cardClass}`;
+      els.playedCardDisplay.textContent = UnoGame.valueDisplay(card.value);
+    } else {
+      els.playedCardDisplay.className = 'played-card-display card-draw';
+      els.playedCardDisplay.textContent = 'Drew a card';
+    }
 
     // Next player
     els.nextPlayerAnnounce.textContent = nextPlayer;
@@ -329,12 +301,6 @@
       btn.disabled = false;
     });
     updatePlayButton();
-
-    // Reset camera confidence so it can suggest again
-    if (camera) {
-      camera.confidenceCount = 0;
-      camera.lastDetectedColor = null;
-    }
   }
 
   // ====== UPDATE GAME UI ======
@@ -346,8 +312,24 @@
     // Current player
     els.currentPlayerName.textContent = game.currentPlayer;
 
+    // Current card on table
+    updateCurrentCardDisplay();
+
     // Player ring
     renderPlayerRing();
+  }
+
+  function updateCurrentCardDisplay() {
+    const card = game.currentCard;
+    if (!card) {
+      els.currentCardDisplay.className = 'current-card-display card-none';
+      els.currentCardDisplay.textContent = 'None yet';
+      return;
+    }
+    const cardClass = card.color === 'wild' ? 'card-wild' : `card-${card.color}`;
+    els.currentCardDisplay.className = `current-card-display ${cardClass}`;
+    const colorLabel = card.color.charAt(0).toUpperCase() + card.color.slice(1);
+    els.currentCardDisplay.textContent = `${colorLabel} ${UnoGame.valueDisplay(card.value)}`;
   }
 
   function renderPlayerRing() {
@@ -380,7 +362,6 @@
 
   els.btnNewGame.addEventListener('click', () => {
     els.overlayMenu.classList.add('hidden');
-    if (camera) camera.stop();
     game = null;
     selectedColor = null;
     selectedValue = null;
@@ -391,7 +372,6 @@
   function speak(text) {
     if (!('speechSynthesis' in window)) return;
 
-    // Cancel any ongoing speech
     window.speechSynthesis.cancel();
 
     const utterance = new SpeechSynthesisUtterance(text);
@@ -399,7 +379,6 @@
     utterance.pitch = 1.0;
     utterance.volume = 1.0;
 
-    // Try to pick a good voice
     const voices = window.speechSynthesis.getVoices();
     if (voices.length > 0) {
       const englishVoice = voices.find(v => v.lang.startsWith('en') && v.localService);
@@ -409,7 +388,6 @@
     window.speechSynthesis.speak(utterance);
   }
 
-  // Pre-load voices (some browsers need this)
   if ('speechSynthesis' in window) {
     window.speechSynthesis.getVoices();
     window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
@@ -425,9 +403,7 @@
   // ====== SERVICE WORKER REGISTRATION ======
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('sw.js').catch(() => {
-        // Service worker registration failed - app still works fine
-      });
+      navigator.serviceWorker.register('sw.js').catch(() => {});
     });
   }
 

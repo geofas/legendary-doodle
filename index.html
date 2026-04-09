@@ -21,7 +21,7 @@
         <div class="logo-card logo-green">O</div>
       </div>
       <h1>Uno Tracker</h1>
-      <p class="subtitle">Camera-assisted turn &amp; direction tracker</p>
+      <p class="subtitle">Turn &amp; direction tracker for Uno</p>
       <button id="btn-start" class="btn btn-primary btn-large">Start Game</button>
     </div>
   </div>
@@ -69,19 +69,16 @@
       </div>
     </div>
 
-    <!-- Camera feed -->
-    <div class="camera-container">
-      <video id="camera-feed" autoplay playsinline muted></video>
-      <canvas id="camera-canvas" class="hidden-canvas"></canvas>
-      <div id="color-indicator" class="color-indicator">
-        <span id="detected-color-label">Scanning...</span>
-      </div>
+    <!-- Current card on table -->
+    <div id="current-card-area" class="current-card-area">
+      <div class="current-card-label">Card on table</div>
+      <div id="current-card-display" class="current-card-display card-none">None yet</div>
     </div>
 
     <!-- Card selection -->
     <div class="card-selection">
       <div class="selection-section">
-        <div class="section-label">Color</div>
+        <div class="section-label">Card played</div>
         <div class="color-buttons">
           <button class="btn-color btn-uno-red" data-color="red">Red</button>
           <button class="btn-color btn-uno-blue" data-color="blue">Blue</button>
@@ -92,7 +89,6 @@
       </div>
 
       <div class="selection-section">
-        <div class="section-label">Value</div>
         <div class="value-buttons">
           <button class="btn-value" data-value="0">0</button>
           <button class="btn-value" data-value="1">1</button>
@@ -112,9 +108,14 @@
         </div>
       </div>
 
-      <button id="btn-play-card" class="btn btn-primary btn-play" disabled>
-        Play Card
-      </button>
+      <div class="action-buttons">
+        <button id="btn-play-card" class="btn btn-primary btn-play" disabled>
+          Play Card
+        </button>
+        <button id="btn-draw-card" class="btn btn-draw">
+          Can't play &mdash; Draw
+        </button>
+      </div>
     </div>
 
     <!-- Player ring at bottom -->
@@ -145,7 +146,6 @@
   <button id="btn-menu" class="btn-menu hidden" title="Menu">&#x2630;</button>
 
   <script src="game.js"></script>
-  <script src="camera.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

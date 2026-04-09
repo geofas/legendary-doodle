@@ -1,10 +1,9 @@
-const CACHE_NAME = 'uno-tracker-v1';
+const CACHE_NAME = 'uno-tracker-v2';
 const ASSETS = [
   './',
   './index.html',
   './style.css',
   './game.js',
-  './camera.js',
   './app.js',
   './manifest.json'
 ];

@@ -320,54 +320,56 @@ html, body {
   text-overflow: ellipsis;
 }
 
-/* Camera */
-.camera-container {
-  position: relative;
-  width: 100%;
-  aspect-ratio: 4/3;
-  background: #000;
+/* Current card on table */
+.current-card-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px 16px;
+  gap: 6px;
   flex-shrink: 0;
-  overflow: hidden;
 }
 
-.camera-container video {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  transform: scaleX(-1); /* mirror front camera */
+.current-card-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-secondary);
 }
 
-.hidden-canvas {
-  display: none;
-}
-
-.color-indicator {
-  position: absolute;
-  bottom: 8px;
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 6px 16px;
-  border-radius: 20px;
-  background: rgba(0,0,0,0.7);
-  font-size: 0.85rem;
+.current-card-display {
+  padding: 12px 28px;
+  border-radius: var(--radius);
+  font-size: 1.3rem;
+  font-weight: 800;
   color: white;
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
-  transition: background-color 0.3s;
+  text-shadow: 1px 1px 3px rgba(0,0,0,0.5);
+  text-align: center;
+  min-width: 140px;
+  transition: background 0.3s;
 }
 
-.color-indicator.detected-red { border: 2px solid var(--uno-red); }
-.color-indicator.detected-blue { border: 2px solid var(--uno-blue); }
-.color-indicator.detected-green { border: 2px solid var(--uno-green); }
-.color-indicator.detected-yellow { border: 2px solid var(--uno-yellow); }
+.current-card-display.card-none {
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  text-shadow: none;
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.current-card-display.card-red { background: var(--uno-red); }
+.current-card-display.card-blue { background: var(--uno-blue); }
+.current-card-display.card-green { background: var(--uno-green); }
+.current-card-display.card-yellow { background: var(--uno-yellow); color: #333; text-shadow: none; }
+.current-card-display.card-wild { background: linear-gradient(135deg, var(--uno-red), var(--uno-blue), var(--uno-green), var(--uno-yellow)); }
 
 /* Card selection */
 .card-selection {
   flex: 1;
   display: flex;
   flex-direction: column;
-  padding: 8px 12px;
-  gap: 6px;
+  padding: 10px 12px;
+  gap: 8px;
   overflow-y: auto;
   min-height: 0;
 }
@@ -445,9 +447,34 @@ html, body {
   font-size: 0.8rem;
 }
 
-.btn-play {
+.action-buttons {
+  display: flex;
+  gap: 8px;
   flex-shrink: 0;
   margin-top: 4px;
+}
+
+.btn-play {
+  flex: 2;
+}
+
+.btn-draw {
+  flex: 1;
+  border: none;
+  border-radius: var(--radius);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 12px 8px;
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  border: 1px solid rgba(255,255,255,0.15);
+  transition: transform 0.1s, opacity 0.1s;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.btn-draw:active {
+  transform: scale(0.96);
 }
 
 /* Player ring */
@@ -511,6 +538,7 @@ html, body {
 .played-card-display.card-green { background: var(--uno-green); }
 .played-card-display.card-yellow { background: var(--uno-yellow); color: #333; text-shadow: none; }
 .played-card-display.card-wild { background: linear-gradient(135deg, var(--uno-red), var(--uno-blue), var(--uno-green), var(--uno-yellow)); }
+.played-card-display.card-draw { background: var(--bg-card); border: 2px solid rgba(255,255,255,0.2); color: var(--text-secondary); text-shadow: none; font-size: 1.1rem; }
 
 .announcement-arrow {
   font-size: 2rem;
@@ -575,20 +603,10 @@ html, body {
 }
 
 /* ====== UTILITIES ====== */
-@media (min-width: 500px) {
-  .camera-container {
-    max-height: 240px;
-    aspect-ratio: unset;
-  }
-}
-
 @media (max-height: 600px) {
-  .camera-container {
-    aspect-ratio: 16/9;
-    max-height: 160px;
-  }
-
   .btn-color { padding: 8px 4px; font-size: 0.75rem; }
   .btn-value { padding: 8px 4px; font-size: 0.85rem; }
   .current-player-name { font-size: 1.1rem; }
+  .current-card-area { padding: 8px 16px; }
+  .current-card-display { padding: 8px 20px; font-size: 1rem; }
 }

@@ -180,6 +180,36 @@ class UnoGame {
   }
 
   /**
+   * Current player draws a card (can't play). Advances turn to next player.
+   */
+  drawCard() {
+    this.history.push({
+      currentIndex: this.currentIndex,
+      direction: this.direction,
+      currentCard: this.currentCard ? { ...this.currentCard } : null,
+      turnCount: this.turnCount
+    });
+
+    if (this.history.length > 50) {
+      this.history.shift();
+    }
+
+    const previousPlayer = this.currentPlayer;
+    this.turnCount++;
+    this.currentIndex = (this.currentIndex + this.direction + this.playerCount) % this.playerCount;
+
+    return {
+      previousPlayer,
+      nextPlayer: this.currentPlayer,
+      directionChanged: false,
+      direction: this.direction,
+      actionMessage: `${previousPlayer} drew a card`,
+      skippedPlayer: null,
+      card: null
+    };
+  }
+
+  /**
    * Undo the last play.
    */
   undo() {
