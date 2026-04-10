@@ -21,7 +21,7 @@
         <div class="logo-card logo-green">O</div>
       </div>
       <h1>Uno Tracker</h1>
-      <p class="subtitle">Turn &amp; direction tracker for Uno</p>
+      <p class="subtitle">Auto-detects cards via camera</p>
       <button id="btn-start" class="btn btn-primary btn-large">Start Game</button>
     </div>
   </div>
@@ -69,57 +69,100 @@
       </div>
     </div>
 
+    <!-- Camera feed -->
+    <div class="camera-container">
+      <video id="camera-feed" autoplay playsinline muted></video>
+      <canvas id="camera-canvas" class="hidden-canvas"></canvas>
+
+      <!-- Scanning overlay frame -->
+      <div class="scan-overlay">
+        <div class="scan-frame"></div>
+      </div>
+
+      <!-- Status pill -->
+      <div id="scan-status" class="scan-status">
+        <span id="scan-status-text">Initializing camera...</span>
+      </div>
+
+      <!-- Detected color chip -->
+      <div id="detected-chip" class="detected-chip hidden">
+        <span id="detected-chip-text">Red</span>
+      </div>
+    </div>
+
     <!-- Current card on table -->
     <div id="current-card-area" class="current-card-area">
       <div class="current-card-label">Card on table</div>
       <div id="current-card-display" class="current-card-display card-none">None yet</div>
     </div>
 
-    <!-- Card selection -->
-    <div class="card-selection">
-      <div class="selection-section">
-        <div class="section-label">Card played</div>
-        <div class="color-buttons">
-          <button class="btn-color btn-uno-red" data-color="red">Red</button>
-          <button class="btn-color btn-uno-blue" data-color="blue">Blue</button>
-          <button class="btn-color btn-uno-green" data-color="green">Green</button>
-          <button class="btn-color btn-uno-yellow" data-color="yellow">Yellow</button>
-          <button class="btn-color btn-uno-wild" data-color="wild">Wild</button>
-        </div>
+    <!-- Action picker (shown when color detected but value unknown/action card) -->
+    <div id="action-picker" class="action-picker hidden">
+      <div class="action-picker-label">
+        <span id="action-picker-color">Red</span> detected &mdash; what was it?
       </div>
+      <div class="action-picker-buttons">
+        <button class="btn-action-pick" data-value="0">0</button>
+        <button class="btn-action-pick" data-value="1">1</button>
+        <button class="btn-action-pick" data-value="2">2</button>
+        <button class="btn-action-pick" data-value="3">3</button>
+        <button class="btn-action-pick" data-value="4">4</button>
+        <button class="btn-action-pick" data-value="5">5</button>
+        <button class="btn-action-pick" data-value="6">6</button>
+        <button class="btn-action-pick" data-value="7">7</button>
+        <button class="btn-action-pick" data-value="8">8</button>
+        <button class="btn-action-pick" data-value="9">9</button>
+        <button class="btn-action-pick btn-action-special" data-value="skip">Skip</button>
+        <button class="btn-action-pick btn-action-special" data-value="reverse">Rev</button>
+        <button class="btn-action-pick btn-action-special" data-value="draw2">+2</button>
+      </div>
+      <button id="btn-action-picker-cancel" class="btn-action-cancel">Cancel</button>
+    </div>
 
-      <div class="selection-section">
-        <div class="value-buttons">
-          <button class="btn-value" data-value="0">0</button>
-          <button class="btn-value" data-value="1">1</button>
-          <button class="btn-value" data-value="2">2</button>
-          <button class="btn-value" data-value="3">3</button>
-          <button class="btn-value" data-value="4">4</button>
-          <button class="btn-value" data-value="5">5</button>
-          <button class="btn-value" data-value="6">6</button>
-          <button class="btn-value" data-value="7">7</button>
-          <button class="btn-value" data-value="8">8</button>
-          <button class="btn-value" data-value="9">9</button>
-          <button class="btn-value btn-value-action" data-value="skip">Skip</button>
-          <button class="btn-value btn-value-action" data-value="reverse">Rev</button>
-          <button class="btn-value btn-value-action" data-value="draw2">+2</button>
-          <button class="btn-value btn-value-action" data-value="wild">Wild</button>
-          <button class="btn-value btn-value-action" data-value="wild4">+4</button>
-        </div>
+    <!-- Wild picker (shown when wild card detected) -->
+    <div id="wild-picker" class="action-picker hidden">
+      <div class="action-picker-label">Wild card &mdash; choose color</div>
+      <div class="action-picker-buttons wild-buttons">
+        <button class="btn-wild-pick btn-uno-red" data-color="red" data-value="wild">Red Wild</button>
+        <button class="btn-wild-pick btn-uno-blue" data-color="blue" data-value="wild">Blue Wild</button>
+        <button class="btn-wild-pick btn-uno-green" data-color="green" data-value="wild">Green Wild</button>
+        <button class="btn-wild-pick btn-uno-yellow" data-color="yellow" data-value="wild">Yellow Wild</button>
+        <button class="btn-wild-pick btn-uno-red" data-color="red" data-value="wild4">Red +4</button>
+        <button class="btn-wild-pick btn-uno-blue" data-color="blue" data-value="wild4">Blue +4</button>
+        <button class="btn-wild-pick btn-uno-green" data-color="green" data-value="wild4">Green +4</button>
+        <button class="btn-wild-pick btn-uno-yellow" data-color="yellow" data-value="wild4">Yellow +4</button>
       </div>
+      <button id="btn-wild-picker-cancel" class="btn-action-cancel">Cancel</button>
+    </div>
 
-      <div class="action-buttons">
-        <button id="btn-play-card" class="btn btn-primary btn-play" disabled>
-          Play Card
-        </button>
-        <button id="btn-draw-card" class="btn btn-draw">
-          Can't play &mdash; Draw
-        </button>
-      </div>
+    <!-- Bottom controls -->
+    <div class="bottom-controls">
+      <button id="btn-draw-card" class="btn btn-draw-big">
+        Can't play &mdash; Draw
+      </button>
+      <button id="btn-manual-entry" class="btn btn-manual">
+        Manual
+      </button>
+      <button id="btn-wild-entry" class="btn btn-manual">
+        Wild
+      </button>
     </div>
 
     <!-- Player ring at bottom -->
     <div id="player-ring" class="player-ring"></div>
+  </div>
+
+  <!-- ========== COUNTDOWN OVERLAY ========== -->
+  <div id="overlay-countdown" class="overlay hidden">
+    <div class="countdown-content">
+      <div class="countdown-label">Detected</div>
+      <div id="countdown-card" class="countdown-card"></div>
+      <div id="countdown-timer" class="countdown-timer">2</div>
+      <div class="countdown-buttons">
+        <button id="btn-countdown-cancel" class="btn btn-secondary">Wrong card</button>
+        <button id="btn-countdown-play" class="btn btn-primary">Play now</button>
+      </div>
+    </div>
   </div>
 
   <!-- ========== ANNOUNCEMENT OVERLAY ========== -->
@@ -130,6 +173,46 @@
       <div id="next-player-announce" class="next-player-announce">Next Player</div>
       <div id="special-action" class="special-action"></div>
       <button id="btn-dismiss-announcement" class="btn btn-primary btn-large">OK</button>
+    </div>
+  </div>
+
+  <!-- ========== MANUAL ENTRY OVERLAY ========== -->
+  <div id="overlay-manual" class="overlay hidden">
+    <div class="manual-content">
+      <h2>Manual Card Entry</h2>
+
+      <div class="section-label">Color</div>
+      <div class="color-buttons">
+        <button class="btn-color btn-uno-red" data-color="red">Red</button>
+        <button class="btn-color btn-uno-blue" data-color="blue">Blue</button>
+        <button class="btn-color btn-uno-green" data-color="green">Green</button>
+        <button class="btn-color btn-uno-yellow" data-color="yellow">Yellow</button>
+        <button class="btn-color btn-uno-wild" data-color="wild">Wild</button>
+      </div>
+
+      <div class="section-label">Value</div>
+      <div class="value-buttons">
+        <button class="btn-value" data-value="0">0</button>
+        <button class="btn-value" data-value="1">1</button>
+        <button class="btn-value" data-value="2">2</button>
+        <button class="btn-value" data-value="3">3</button>
+        <button class="btn-value" data-value="4">4</button>
+        <button class="btn-value" data-value="5">5</button>
+        <button class="btn-value" data-value="6">6</button>
+        <button class="btn-value" data-value="7">7</button>
+        <button class="btn-value" data-value="8">8</button>
+        <button class="btn-value" data-value="9">9</button>
+        <button class="btn-value btn-value-action" data-value="skip">Skip</button>
+        <button class="btn-value btn-value-action" data-value="reverse">Rev</button>
+        <button class="btn-value btn-value-action" data-value="draw2">+2</button>
+        <button class="btn-value btn-value-action" data-value="wild">Wild</button>
+        <button class="btn-value btn-value-action" data-value="wild4">+4</button>
+      </div>
+
+      <div class="manual-actions">
+        <button id="btn-manual-cancel" class="btn btn-secondary">Cancel</button>
+        <button id="btn-manual-play" class="btn btn-primary" disabled>Play Card</button>
+      </div>
     </div>
   </div>
 
@@ -145,7 +228,10 @@
 
   <button id="btn-menu" class="btn-menu hidden" title="Menu">&#x2630;</button>
 
+  <!-- Tesseract.js for OCR (loaded from CDN) -->
+  <script src="https://unpkg.com/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
   <script src="game.js"></script>
+  <script src="camera.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

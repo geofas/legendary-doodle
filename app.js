@@ -1,14 +1,13 @@
 /**
  * Uno Tracker - Main App Controller
  *
- * Manages screen navigation, player setup, card selection UI,
- * game flow, and text-to-speech announcements.
+ * Wires together: setup screen, game state, camera auto-detection,
+ * countdown confirmation, manual fallback pickers, and TTS announcements.
  */
 
 (function () {
   'use strict';
 
-  // ====== DOM REFS ======
   const $ = (sel) => document.querySelector(sel);
   const $$ = (sel) => document.querySelectorAll(sel);
 
@@ -19,34 +18,60 @@
   };
 
   const els = {
-    // Welcome
+    // Welcome / Setup
     btnStart: $('#btn-start'),
-
-    // Setup
     playerList: $('#player-list'),
     inputPlayerName: $('#input-player-name'),
     btnAddPlayer: $('#btn-add-player'),
     btnBeginGame: $('#btn-begin-game'),
     setupError: $('#setup-error'),
 
-    // Game
+    // Game screen
     directionArrow: $('#direction-arrow'),
     directionLabel: $('#direction-label'),
     currentPlayerName: $('#current-player-name'),
+    cameraFeed: $('#camera-feed'),
+    cameraCanvas: $('#camera-canvas'),
+    scanStatus: $('#scan-status'),
+    scanStatusText: $('#scan-status-text'),
+    detectedChip: $('#detected-chip'),
+    detectedChipText: $('#detected-chip-text'),
     currentCardDisplay: $('#current-card-display'),
-    playerRing: $('#player-ring'),
-    btnPlayCard: $('#btn-play-card'),
     btnDrawCard: $('#btn-draw-card'),
+    btnManualEntry: $('#btn-manual-entry'),
+    btnWildEntry: $('#btn-wild-entry'),
+    playerRing: $('#player-ring'),
     btnMenu: $('#btn-menu'),
 
-    // Announcement overlay
+    // Action picker (color known, value unknown)
+    actionPicker: $('#action-picker'),
+    actionPickerColor: $('#action-picker-color'),
+    btnActionPickerCancel: $('#btn-action-picker-cancel'),
+
+    // Wild picker
+    wildPicker: $('#wild-picker'),
+    btnWildPickerCancel: $('#btn-wild-picker-cancel'),
+
+    // Countdown overlay
+    overlayCountdown: $('#overlay-countdown'),
+    countdownCard: $('#countdown-card'),
+    countdownTimer: $('#countdown-timer'),
+    btnCountdownCancel: $('#btn-countdown-cancel'),
+    btnCountdownPlay: $('#btn-countdown-play'),
+
+    // Announcement
     overlayAnnouncement: $('#overlay-announcement'),
     playedCardDisplay: $('#played-card-display'),
     nextPlayerAnnounce: $('#next-player-announce'),
     specialAction: $('#special-action'),
     btnDismissAnnouncement: $('#btn-dismiss-announcement'),
 
-    // Menu overlay
+    // Manual entry overlay
+    overlayManual: $('#overlay-manual'),
+    btnManualCancel: $('#btn-manual-cancel'),
+    btnManualPlay: $('#btn-manual-play'),
+
+    // Menu
     overlayMenu: $('#overlay-menu'),
     btnUndo: $('#btn-undo'),
     btnNewGame: $('#btn-new-game'),
@@ -56,14 +81,16 @@
   // ====== STATE ======
   let players = [];
   let game = null;
-  let selectedColor = null;
-  let selectedValue = null;
+  let camera = null;
+  let pendingDetection = null;   // card being confirmed via countdown
+  let countdownInterval = null;
+  let manualSelectedColor = null;
+  let manualSelectedValue = null;
 
   // ====== SCREEN MANAGEMENT ======
   function showScreen(name) {
     Object.values(screens).forEach(s => s.classList.remove('active'));
     screens[name].classList.add('active');
-
     els.btnMenu.classList.toggle('hidden', name !== 'game');
   }
 
@@ -85,7 +112,6 @@
       showSetupError('Name already used');
       return;
     }
-
     players.push(name);
     renderPlayerList();
     els.inputPlayerName.value = '';
@@ -125,135 +151,201 @@
     els.setupError.textContent = msg;
     els.setupError.classList.remove('hidden');
   }
-
   function hideSetupError() {
     els.setupError.classList.add('hidden');
   }
 
-  els.btnAddPlayer.addEventListener('click', () => {
-    addPlayer(els.inputPlayerName.value);
-  });
-
+  els.btnAddPlayer.addEventListener('click', () => addPlayer(els.inputPlayerName.value));
   els.inputPlayerName.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-      addPlayer(els.inputPlayerName.value);
-    }
+    if (e.key === 'Enter') addPlayer(els.inputPlayerName.value);
   });
-
   els.playerList.addEventListener('click', (e) => {
-    const removeBtn = e.target.closest('.btn-remove');
-    if (removeBtn) {
-      removePlayer(parseInt(removeBtn.dataset.index, 10));
-    }
+    const btn = e.target.closest('.btn-remove');
+    if (btn) removePlayer(parseInt(btn.dataset.index, 10));
   });
-
   $$('.quick-player').forEach(btn => {
     btn.addEventListener('click', () => addPlayer(btn.dataset.name));
   });
-
   els.btnBeginGame.addEventListener('click', () => {
-    if (players.length < 2) return;
-    startGame();
+    if (players.length >= 2) startGame();
   });
 
   // ====== GAME START ======
-  function startGame() {
+  async function startGame() {
     game = new UnoGame(players);
     showScreen('game');
-    resetCardSelection();
     updateGameUI();
-  }
 
-  // ====== CARD SELECTION ======
-  function selectColor(color) {
-    selectedColor = color;
-    $$('.btn-color').forEach(btn => {
-      btn.classList.toggle('selected', btn.dataset.color === color);
-    });
-    updatePlayButton();
-    updateValueButtonsForColor(color);
-  }
+    // Initialize camera
+    camera = new UnoCamera(els.cameraFeed, els.cameraCanvas);
+    camera.onStatus = handleCameraStatus;
+    camera.onColorDetected = handleLiveColor;
+    camera.onCardDetected = handleCardDetected;
+    camera.onColorStableNoValue = handleColorOnlyDetected;
 
-  function selectValue(value) {
-    selectedValue = value;
-    $$('.btn-value').forEach(btn => {
-      btn.classList.toggle('selected', btn.dataset.value === value);
-    });
-    updatePlayButton();
-
-    // If wild/wild4 value selected, auto-select wild color if no color yet
-    if ((value === 'wild' || value === 'wild4') && !selectedColor) {
-      selectColor('wild');
+    const ok = await camera.start();
+    if (ok) {
+      camera.startScanning();
+    } else {
+      updateScanStatus('Camera blocked - use Manual button', 'error');
     }
   }
 
-  function updateValueButtonsForColor(color) {
+  // ====== CAMERA CALLBACKS ======
+  function handleCameraStatus(text, type) {
+    updateScanStatus(text, type);
+  }
+
+  function updateScanStatus(text, type) {
+    els.scanStatusText.textContent = text;
+    els.scanStatus.className = 'scan-status status-' + (type || 'info');
+  }
+
+  function handleLiveColor(color) {
+    if (color === 'none') {
+      els.detectedChip.classList.add('hidden');
+      return;
+    }
+    els.detectedChip.classList.remove('hidden');
+    els.detectedChip.className = 'detected-chip chip-' + color;
+    els.detectedChipText.textContent = color === 'wild' ? 'Wild' :
+      color.charAt(0).toUpperCase() + color.slice(1);
+  }
+
+  function handleCardDetected(card) {
+    // Full auto-detect: show countdown overlay
+    startCountdown(card);
+  }
+
+  function handleColorOnlyDetected(color) {
+    // OCR failed or wild card - open action picker for this color
     if (color === 'wild') {
-      $$('.btn-value').forEach(btn => {
-        const v = btn.dataset.value;
-        if (v === 'wild' || v === 'wild4') {
-          btn.style.opacity = '1';
-          btn.disabled = false;
-        } else {
-          btn.style.opacity = '0.3';
-          btn.disabled = true;
-        }
-      });
-      if (!selectedValue || (selectedValue !== 'wild' && selectedValue !== 'wild4')) {
-        selectValue('wild');
-      }
+      openWildPicker();
     } else {
-      $$('.btn-value').forEach(btn => {
-        const v = btn.dataset.value;
-        if (v === 'wild') {
-          btn.style.opacity = '0.3';
-          btn.disabled = true;
-        } else {
-          btn.style.opacity = '1';
-          btn.disabled = false;
-        }
-      });
-      if (selectedValue === 'wild') {
-        selectedValue = null;
-        $$('.btn-value').forEach(btn => btn.classList.remove('selected'));
-      }
+      openActionPicker(color);
     }
   }
 
-  function updatePlayButton() {
-    const canPlay = selectedColor && selectedValue;
-    els.btnPlayCard.disabled = !canPlay;
+  // ====== ACTION PICKER (color known, value manual) ======
+  function openActionPicker(color) {
+    if (camera) camera.pauseDetection();
 
-    if (canPlay) {
-      const colorLabel = selectedColor.charAt(0).toUpperCase() + selectedColor.slice(1);
-      const valueLabel = UnoGame.valueDisplay(selectedValue);
-      els.btnPlayCard.textContent = `Play ${colorLabel} ${valueLabel}`;
-    } else {
-      els.btnPlayCard.textContent = 'Play Card';
+    els.actionPicker.classList.remove('hidden');
+    els.actionPicker.className = 'action-picker picker-' + color;
+    els.actionPickerColor.textContent = color.charAt(0).toUpperCase() + color.slice(1);
+    els.actionPicker.dataset.color = color;
+  }
+
+  function closeActionPicker() {
+    els.actionPicker.classList.add('hidden');
+    if (camera) {
+      camera.resetDetection();
+      camera.resumeDetection();
     }
   }
 
-  // Color buttons
-  $$('.btn-color').forEach(btn => {
-    btn.addEventListener('click', () => selectColor(btn.dataset.color));
-  });
-
-  // Value buttons
-  $$('.btn-value').forEach(btn => {
+  $$('.btn-action-pick').forEach(btn => {
     btn.addEventListener('click', () => {
-      if (!btn.disabled) selectValue(btn.dataset.value);
+      const color = els.actionPicker.dataset.color;
+      const value = btn.dataset.value;
+      els.actionPicker.classList.add('hidden');
+      playCard(color, value);
     });
   });
 
-  // Play card button
-  els.btnPlayCard.addEventListener('click', () => {
-    if (!selectedColor || !selectedValue) return;
-    const result = game.playCard(selectedColor, selectedValue);
-    showAnnouncement(result);
+  els.btnActionPickerCancel.addEventListener('click', closeActionPicker);
+
+  // ====== WILD PICKER ======
+  function openWildPicker() {
+    if (camera) camera.pauseDetection();
+    els.wildPicker.classList.remove('hidden');
+  }
+
+  function closeWildPicker() {
+    els.wildPicker.classList.add('hidden');
+    if (camera) {
+      camera.resetDetection();
+      camera.resumeDetection();
+    }
+  }
+
+  $$('.btn-wild-pick').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const color = btn.dataset.color;
+      const value = btn.dataset.value;
+      els.wildPicker.classList.add('hidden');
+      playCard(color, value);
+    });
   });
 
-  // Draw card button (can't play)
+  els.btnWildPickerCancel.addEventListener('click', closeWildPicker);
+
+  // ====== COUNTDOWN OVERLAY ======
+  function startCountdown(card) {
+    pendingDetection = card;
+    if (camera) camera.pauseDetection();
+
+    const cardClass = card.color === 'wild' ? 'card-wild' : `card-${card.color}`;
+    els.countdownCard.className = `countdown-card ${cardClass}`;
+    const colorLabel = card.color.charAt(0).toUpperCase() + card.color.slice(1);
+    els.countdownCard.textContent = `${colorLabel} ${UnoGame.valueDisplay(card.value)}`;
+
+    let remaining = 2;
+    els.countdownTimer.textContent = remaining;
+    els.overlayCountdown.classList.remove('hidden');
+
+    speak(`${colorLabel} ${UnoGame.valueDisplay(card.value)}`);
+
+    if (countdownInterval) clearInterval(countdownInterval);
+    countdownInterval = setInterval(() => {
+      remaining--;
+      if (remaining <= 0) {
+        clearInterval(countdownInterval);
+        countdownInterval = null;
+        confirmCountdown();
+      } else {
+        els.countdownTimer.textContent = remaining;
+      }
+    }, 1000);
+  }
+
+  function cancelCountdown() {
+    if (countdownInterval) {
+      clearInterval(countdownInterval);
+      countdownInterval = null;
+    }
+    els.overlayCountdown.classList.add('hidden');
+    pendingDetection = null;
+    if (camera) {
+      camera.resetDetection();
+      camera.resumeDetection();
+    }
+  }
+
+  function confirmCountdown() {
+    if (countdownInterval) {
+      clearInterval(countdownInterval);
+      countdownInterval = null;
+    }
+    els.overlayCountdown.classList.add('hidden');
+    if (pendingDetection) {
+      const card = pendingDetection;
+      pendingDetection = null;
+      playCard(card.color, card.value);
+    }
+  }
+
+  els.btnCountdownCancel.addEventListener('click', cancelCountdown);
+  els.btnCountdownPlay.addEventListener('click', confirmCountdown);
+
+  // ====== PLAY / DRAW ======
+  function playCard(color, value) {
+    const result = game.playCard(color, value);
+    showAnnouncement(result);
+  }
+
   els.btnDrawCard.addEventListener('click', () => {
+    if (!game) return;
     const result = game.drawCard();
     showAnnouncement(result);
   });
@@ -262,7 +354,8 @@
   function showAnnouncement(result) {
     const { card, nextPlayer, actionMessage } = result;
 
-    // Card display
+    if (camera) camera.pauseDetection();
+
     if (card) {
       const cardClass = card.color === 'wild' ? 'card-wild' : `card-${card.color}`;
       els.playedCardDisplay.className = `played-card-display ${cardClass}`;
@@ -272,50 +365,28 @@
       els.playedCardDisplay.textContent = 'Drew a card';
     }
 
-    // Next player
     els.nextPlayerAnnounce.textContent = nextPlayer;
-
-    // Special action message
     els.specialAction.textContent = actionMessage || '';
-
-    // Show overlay
     els.overlayAnnouncement.classList.remove('hidden');
 
-    // Text-to-speech
     speak(`${nextPlayer}'s turn` + (actionMessage ? `. ${actionMessage}` : ''));
   }
 
   els.btnDismissAnnouncement.addEventListener('click', () => {
     els.overlayAnnouncement.classList.add('hidden');
-    resetCardSelection();
     updateGameUI();
+    if (camera) {
+      camera.resetDetection();
+      camera.resumeDetection();
+    }
   });
 
-  function resetCardSelection() {
-    selectedColor = null;
-    selectedValue = null;
-    $$('.btn-color').forEach(btn => btn.classList.remove('selected'));
-    $$('.btn-value').forEach(btn => {
-      btn.classList.remove('selected');
-      btn.style.opacity = '1';
-      btn.disabled = false;
-    });
-    updatePlayButton();
-  }
-
-  // ====== UPDATE GAME UI ======
+  // ====== GAME UI ======
   function updateGameUI() {
-    // Direction
     els.directionArrow.classList.toggle('counter-clockwise', game.direction === -1);
     els.directionLabel.textContent = game.directionName;
-
-    // Current player
     els.currentPlayerName.textContent = game.currentPlayer;
-
-    // Current card on table
     updateCurrentCardDisplay();
-
-    // Player ring
     renderPlayerRing();
   }
 
@@ -342,50 +413,136 @@
     }).join('');
   }
 
+  // ====== MANUAL ENTRY OVERLAY ======
+  els.btnManualEntry.addEventListener('click', () => {
+    openManual();
+  });
+
+  els.btnWildEntry.addEventListener('click', () => {
+    openWildPicker();
+  });
+
+  function openManual() {
+    if (camera) camera.pauseDetection();
+    manualSelectedColor = null;
+    manualSelectedValue = null;
+    $$('#overlay-manual .btn-color').forEach(b => b.classList.remove('selected'));
+    $$('#overlay-manual .btn-value').forEach(b => {
+      b.classList.remove('selected');
+      b.style.opacity = '1';
+      b.disabled = false;
+    });
+    els.btnManualPlay.disabled = true;
+    els.btnManualPlay.textContent = 'Play Card';
+    els.overlayManual.classList.remove('hidden');
+  }
+
+  function closeManual() {
+    els.overlayManual.classList.add('hidden');
+    if (camera) {
+      camera.resetDetection();
+      camera.resumeDetection();
+    }
+  }
+
+  $$('#overlay-manual .btn-color').forEach(btn => {
+    btn.addEventListener('click', () => {
+      manualSelectedColor = btn.dataset.color;
+      $$('#overlay-manual .btn-color').forEach(b => b.classList.toggle('selected', b === btn));
+      updateManualValueButtons();
+      updateManualPlayButton();
+    });
+  });
+
+  $$('#overlay-manual .btn-value').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (btn.disabled) return;
+      manualSelectedValue = btn.dataset.value;
+      $$('#overlay-manual .btn-value').forEach(b => b.classList.toggle('selected', b === btn));
+      if ((manualSelectedValue === 'wild' || manualSelectedValue === 'wild4') && !manualSelectedColor) {
+        manualSelectedColor = 'wild';
+        $$('#overlay-manual .btn-color').forEach(b => b.classList.toggle('selected', b.dataset.color === 'wild'));
+        updateManualValueButtons();
+      }
+      updateManualPlayButton();
+    });
+  });
+
+  function updateManualValueButtons() {
+    const isWild = manualSelectedColor === 'wild';
+    $$('#overlay-manual .btn-value').forEach(b => {
+      const v = b.dataset.value;
+      const isWildValue = v === 'wild' || v === 'wild4';
+      if (isWild) {
+        b.disabled = !isWildValue;
+        b.style.opacity = isWildValue ? '1' : '0.3';
+      } else {
+        b.disabled = v === 'wild';
+        b.style.opacity = v === 'wild' ? '0.3' : '1';
+      }
+    });
+  }
+
+  function updateManualPlayButton() {
+    els.btnManualPlay.disabled = !(manualSelectedColor && manualSelectedValue);
+    if (manualSelectedColor && manualSelectedValue) {
+      const colorLabel = manualSelectedColor.charAt(0).toUpperCase() + manualSelectedColor.slice(1);
+      els.btnManualPlay.textContent = `Play ${colorLabel} ${UnoGame.valueDisplay(manualSelectedValue)}`;
+    }
+  }
+
+  els.btnManualCancel.addEventListener('click', closeManual);
+  els.btnManualPlay.addEventListener('click', () => {
+    if (!manualSelectedColor || !manualSelectedValue) return;
+    els.overlayManual.classList.add('hidden');
+    playCard(manualSelectedColor, manualSelectedValue);
+  });
+
   // ====== MENU ======
   els.btnMenu.addEventListener('click', () => {
+    if (camera) camera.pauseDetection();
     els.overlayMenu.classList.remove('hidden');
   });
 
   els.btnCloseMenu.addEventListener('click', () => {
     els.overlayMenu.classList.add('hidden');
+    if (camera) camera.resumeDetection();
   });
 
   els.btnUndo.addEventListener('click', () => {
     if (game && game.undo()) {
       els.overlayMenu.classList.add('hidden');
-      resetCardSelection();
       updateGameUI();
       speak(`Undone. ${game.currentPlayer}'s turn.`);
+      if (camera) {
+        camera.resetDetection();
+        camera.resumeDetection();
+      }
     }
   });
 
   els.btnNewGame.addEventListener('click', () => {
     els.overlayMenu.classList.add('hidden');
+    if (camera) camera.stop();
+    camera = null;
     game = null;
-    selectedColor = null;
-    selectedValue = null;
     showScreen('setup');
   });
 
   // ====== TEXT-TO-SPEECH ======
   function speak(text) {
     if (!('speechSynthesis' in window)) return;
-
     window.speechSynthesis.cancel();
-
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 1.0;
-    utterance.pitch = 1.0;
-    utterance.volume = 1.0;
-
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate = 1.0;
+    u.pitch = 1.0;
+    u.volume = 1.0;
     const voices = window.speechSynthesis.getVoices();
     if (voices.length > 0) {
-      const englishVoice = voices.find(v => v.lang.startsWith('en') && v.localService);
-      if (englishVoice) utterance.voice = englishVoice;
+      const v = voices.find(vc => vc.lang.startsWith('en') && vc.localService);
+      if (v) u.voice = v;
     }
-
-    window.speechSynthesis.speak(utterance);
+    window.speechSynthesis.speak(u);
   }
 
   if ('speechSynthesis' in window) {
@@ -400,20 +557,18 @@
     return div.innerHTML;
   }
 
-  // ====== SERVICE WORKER REGISTRATION ======
+  // ====== SERVICE WORKER ======
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
       navigator.serviceWorker.register('sw.js').catch(() => {});
     });
   }
 
-  // ====== PREVENT ZOOM ON DOUBLE TAP ======
+  // ====== PREVENT DOUBLE-TAP ZOOM ======
   let lastTouchEnd = 0;
   document.addEventListener('touchend', (e) => {
     const now = Date.now();
-    if (now - lastTouchEnd <= 300) {
-      e.preventDefault();
-    }
+    if (now - lastTouchEnd <= 300) e.preventDefault();
     lastTouchEnd = now;
   }, false);
 
